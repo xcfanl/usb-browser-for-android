@@ -198,16 +198,26 @@ pub fn move_paths(sources: Vec<String>, dst_dir: String) -> Result<Vec<String>, 
         match fs::rename(&sp, &dst) {
             Ok(()) => {}
             Err(_) => {
-                // 跨设备：复制后删除
-                match copy_recursive(&sp, &dst, 0).and_then(|_| fs::symlink_metadata(&sp).map(|m| m).and_then(|_| {
-                    if sp.is_dir() {
-                        fs::remove_dir_all(&sp)
-                    } else {
-                        fs::remove_file(&sp)
+                // 跨设备：复制后删除；复制中途失败（如 U 盘拔出）需清理半拷贝残留
+                match copy_recursive(&sp, &dst, 0) {
+                    Ok(()) => {
+                        let del = if sp.is_dir() {
+                            fs::remove_dir_all(&sp)
+                        } else {
+                            fs::remove_file(&sp)
+                        };
+                        if let Err(e) = del {
+                            errs.push(format!("{s}: 已复制到目标位置，但删除源失败: {e}"));
+                        }
                     }
-                })) {
-                    Ok(()) => {}
-                    Err(e) => errs.push(format!("{s}: {e}")),
+                    Err(e) => {
+                        if dst.is_dir() {
+                            let _ = fs::remove_dir_all(&dst);
+                        } else {
+                            let _ = fs::remove_file(&dst);
+                        }
+                        errs.push(format!("{s}: {e}"));
+                    }
                 }
             }
         }

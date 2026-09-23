@@ -3,6 +3,7 @@ import type { Clipboard, Entry, Volume } from '../types'
 import * as api from '../api'
 import { classify, iconFor, mimeFor } from '../fileTypes'
 import { basename, dirname, formatSize, formatTime, joinPath, sortEntries, type SortBy } from '../utils'
+import { useStorageRemoved } from '../hooks'
 import { BottomSheet, ConfirmDialog, Icon, Modal, PATHS, PromptDialog, type SheetAction } from '../ui'
 
 interface Props {
@@ -18,7 +19,6 @@ interface Props {
   registerNav: (n: { apply: (dirs: string[]) => void; currentDirs: () => string[] } | null) => void
   registerGuard: (fn: (() => boolean) | null) => void
   toast: (msg: string) => void
-  refreshVolumes: () => void
 }
 
 type Dialog =
@@ -30,7 +30,7 @@ type Dialog =
 export default function Explorer(props: Props) {
   const {
     root: rootProp, initialDirs, volumes, clipboard, setClipboard, onOpenFile, onExit,
-    pushDirNav, replaceDirNav, registerNav, registerGuard, toast, refreshVolumes,
+    pushDirNav, replaceDirNav, registerNav, registerGuard, toast,
   } = props
   const initDirs = initialDirs ?? []
   const [root, setRoot] = useState<string>(rootProp)
@@ -75,21 +75,11 @@ export default function Explorer(props: Props) {
 
   useEffect(() => { load(dir) }, [dir, load])
 
-  // USB 卷变化：刷新卷列表；当前目录失效则退回主页
-  useEffect(() => {
-    let un: (() => void) | undefined
-    api.onVolumesChanged(() => {
-      refreshVolumes()
-      if (dir.startsWith('/storage')) {
-        api.statPath(dir).catch(() => {
-          toast('当前目录的存储卷已移除')
-          onExit()
-        })
-      }
-    }).then((u) => (un = u))
-    return () => un?.()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dir, refreshVolumes, onExit])
+  // USB 卷移除：当前目录失效则退回主页（卷列表刷新由 App 层统一处理）
+  useStorageRemoved(dir, () => {
+    toast('当前目录的存储卷已移除')
+    onExit()
+  })
 
   /* 返回键弹出目录栈：popstate 携带目标位置完整目录链 */
   useEffect(() => {

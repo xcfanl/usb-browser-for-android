@@ -3,6 +3,7 @@ import Explorer from './components/Explorer'
 import Home from './components/Home'
 import type { Screen, ViewerKind, Clipboard, Entry, Volume } from './types'
 import * as api from './api'
+import { useStorageRemoved } from './hooks'
 import { classify, MIME_MAP } from './fileTypes'
 import { Icon, PATHS, Toast, showToast } from './ui'
 import './styles.css'
@@ -42,22 +43,41 @@ export default function App() {
 
   const toast = useCallback((m: string) => showToast(setToastMsg, m), [])
 
-  /* 权限检测：启动 + 回到前台时 */
-  useEffect(() => {
-    const check = () =>
-      api.checkAllFilesAccess().then(setAllowed).catch(() => setAllowed(true))
-    check()
-    const onVis = () => { if (document.visibilityState === 'visible') check() }
-    document.addEventListener('visibilitychange', onVis)
-    return () => document.removeEventListener('visibilitychange', onVis)
-  }, [])
-
   /* 卷列表 */
   const refreshVolumes = useCallback(() => {
     setVolsLoading(true)
     api.getVolumes().then((v) => { setVolumes(v); setVolsLoading(false) }).catch(() => setVolsLoading(false))
   }, [])
   useEffect(() => { refreshVolumes() }, [refreshVolumes])
+
+  /* U 盘插拔：Rust 侧轮询器发出事件，卷列表统一在此刷新 */
+  useEffect(() => {
+    let un: (() => void) | undefined
+    let alive = true
+    api.onVolumesChanged(() => refreshVolumes()).then((u) => {
+      if (alive) un = u
+      else u()
+    })
+    return () => {
+      alive = false
+      un?.()
+    }
+  }, [refreshVolumes])
+
+  /* 权限检测：启动 + 回到前台时；回前台同时刷新卷列表（后台事件可能丢失） */
+  useEffect(() => {
+    const check = () =>
+      api.checkAllFilesAccess().then(setAllowed).catch(() => setAllowed(true))
+    check()
+    const onVis = () => {
+      if (document.visibilityState === 'visible') {
+        check()
+        refreshVolumes()
+      }
+    }
+    document.addEventListener('visibilitychange', onVis)
+    return () => document.removeEventListener('visibilitychange', onVis)
+  }, [refreshVolumes])
 
   /* Android 返回键 <-> 历史栈（d: 屏幕深度，dirs: 当前位置目录链） */
   useEffect(() => {
@@ -199,7 +219,6 @@ export default function App() {
           registerNav={registerNav}
           registerGuard={registerGuard}
           toast={toast}
-          refreshVolumes={refreshVolumes}
         />
       ) : top.t === 'editor' ? (
         <Suspense fallback={<div className="hint screen-loading">加载中…</div>}>
@@ -229,6 +248,11 @@ function ViewerHost({ kind, path, name, goBack, toast, shareFile, asText }: {
 }) {
   const Comp = VIEWER_COMPONENTS[kind] ?? VIEWER_COMPONENTS.binary
   const ext = name.includes('.') ? name.slice(name.lastIndexOf('.') + 1) : ''
+  /* 预览期间 U 盘被拔出：提示并退回 */
+  useStorageRemoved(path, () => {
+    toast('文件所在存储卷已移除')
+    goBack()
+  })
   return (
     <div className="viewer-screen">
       <header className="topbar">

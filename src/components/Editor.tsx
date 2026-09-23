@@ -14,6 +14,7 @@ import { xml } from '@codemirror/lang-xml'
 import { yaml } from '@codemirror/lang-yaml'
 import { sql } from '@codemirror/lang-sql'
 import * as api from '../api'
+import { useStorageRemoved } from '../hooks'
 import { extOf } from '../fileTypes'
 import { formatSize } from '../utils'
 import { ConfirmDialog, Icon, PATHS } from '../ui'
@@ -149,6 +150,14 @@ export default function Editor({ path, registerGuard, goBack, toast }: {
     })
     return () => registerGuard(null)
   }, [registerGuard])
+
+  /* 文件所在存储卷被移除（如 U 盘拔出）：内容已不可保存，放弃未保存状态并退出 */
+  useStorageRemoved(path, () => {
+    toast('文件所在存储卷已移除')
+    dirtyRef.current = false
+    setDirty(false)
+    goBack()
+  })
 
   if (text === null) return <div className="hint screen-loading">加载中…</div>
 

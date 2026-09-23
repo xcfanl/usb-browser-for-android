@@ -29,7 +29,7 @@ export type ViewerKind =
   | 'video' | 'audio' | 'text' | 'binary'
 
 export type Screen =
-  | { t: 'browse' }
+  | { t: 'explorer'; root: string }
   | { t: 'editor'; path: string }
   | { t: 'viewer'; kind: ViewerKind; path: string; name: string }
 

@@ -10,5 +10,27 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      window.__applySafeArea = function (o) {
+        if (!o) return
+        var s = document.documentElement.style
+        s.setProperty('--sat', (o.t || 0) + 'px')
+        s.setProperty('--sab', (o.b || 0) + 'px')
+        s.setProperty('--sal', (o.l || 0) + 'px')
+        s.setProperty('--sar', (o.r || 0) + 'px')
+      }
+      ;(function () {
+        var n = 0
+        var timer = setInterval(function () {
+          var a = window.__SAFE_AREA
+          if (!a) {
+            if (++n > 120) clearInterval(timer)
+            return
+          }
+          try { window.__applySafeArea(JSON.parse(a.get())) } catch (e) {}
+          clearInterval(timer)
+        }, 250)
+      })()
+    </script>
   </body>
 </html>

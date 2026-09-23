@@ -138,7 +138,10 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release delete "${{ github.ref_name }}" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag=false || true
-          cat > notes.md <<'EOF'
+          if [ -f RELEASE_NOTES.md ]; then
+            cp RELEASE_NOTES.md notes.md
+          else
+            cat > notes.md <<'EOF'
           > ⚠️ **测试版（Beta）** — 正式版发布前，所有构建均标记为测试版，可能存在稳定性或功能问题。
 
           ## 下载说明
@@ -146,6 +149,7 @@ jobs:
           - 侧载安装：允许"安装未知应用"后直接安装
           - 签名证书：CN=USB File Browser（所有测试版与正式版使用同一签名，可直接覆盖升级）
           EOF
+          fi
           if [ "${{ contains(github.ref_name, '-') }}" = "true" ]; then
             PRERELEASE="--prerelease"
           else

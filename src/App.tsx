@@ -1,5 +1,6 @@
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
 import Explorer from './components/Explorer'
+import Home from './components/Home'
 import type { Screen, ViewerKind, Clipboard, Entry, Volume } from './types'
 import * as api from './api'
 import { classify, MIME_MAP } from './fileTypes'
@@ -29,12 +30,15 @@ const VIEWER_COMPONENTS: Record<
 
 export default function App() {
   const [volumes, setVolumes] = useState<Volume[]>([])
+  const [volsLoading, setVolsLoading] = useState(true)
   const [allowed, setAllowed] = useState<boolean | null>(null)
   const [stack, setStack] = useState<Screen[]>([])
   const [clipboard, setClipboard] = useState<Clipboard | null>(null)
   const [toastMsg, setToastMsg] = useState('')
   const depthRef = useRef(0)
   const guardRef = useRef<(() => boolean) | null>(null)
+  const navRef = useRef<{ apply: (dirs: string[]) => void; currentDirs: () => string[] } | null>(null)
+  const initialDirsRef = useRef<string[] | null>(null)
 
   const toast = useCallback((m: string) => showToast(setToastMsg, m), [])
 
@@ -50,25 +54,34 @@ export default function App() {
 
   /* 卷列表 */
   const refreshVolumes = useCallback(() => {
-    api.getVolumes().then(setVolumes).catch(() => {})
+    setVolsLoading(true)
+    api.getVolumes().then((v) => { setVolumes(v); setVolsLoading(false) }).catch(() => setVolsLoading(false))
   }, [])
   useEffect(() => { refreshVolumes() }, [refreshVolumes])
 
-  /* Android 返回键 <-> 屏幕栈 */
+  /* Android 返回键 <-> 历史栈（d: 屏幕深度，dirs: 当前位置目录链） */
   useEffect(() => {
     history.replaceState({ d: 0 }, '')
     const onPop = (e: PopStateEvent) => {
-      const target = (e.state && typeof e.state.d === 'number' ? e.state.d : 0) as number
+      const st = (e.state ?? {}) as { d?: number; dirs?: string[] }
+      const target = typeof st.d === 'number' ? st.d : 0
       if (target >= depthRef.current) {
+        if (target === depthRef.current && guardRef.current?.()) {
+          const cur = navRef.current?.currentDirs()
+          history.pushState(cur ? { d: target, dirs: cur } : { d: target }, '')
+          return
+        }
         depthRef.current = target
-        setStack((s) => s.slice(0, target))
+        if (Array.isArray(st.dirs)) navRef.current?.apply(st.dirs)
         return
       }
       if (guardRef.current?.()) {
-        history.pushState({ d: depthRef.current }, '')
+        const cur = navRef.current?.currentDirs()
+        history.pushState(cur ? { d: depthRef.current, dirs: cur } : { d: depthRef.current }, '')
         return
       }
       depthRef.current = target
+      initialDirsRef.current = Array.isArray(st.dirs) ? st.dirs : null
       setStack((s) => s.slice(0, target))
     }
     window.addEventListener('popstate', onPop)
@@ -76,6 +89,7 @@ export default function App() {
   }, [])
 
   const pushScreen = useCallback((s: Screen) => {
+    initialDirsRef.current = null
     setStack((st) => [...st, s])
     depthRef.current += 1
     history.pushState({ d: depthRef.current }, '')
@@ -85,6 +99,25 @@ export default function App() {
   }, [])
   const registerGuard = useCallback((fn: (() => boolean) | null) => {
     guardRef.current = fn
+  }, [])
+  const registerNav = useCallback(
+    (n: { apply: (dirs: string[]) => void; currentDirs: () => string[] } | null) => {
+      navRef.current = n
+    },
+    [],
+  )
+  const pushDirNav = useCallback((dirs: string[]) => {
+    history.pushState({ d: depthRef.current, dirs }, '')
+  }, [])
+  const replaceDirNav = useCallback((dirs: string[]) => {
+    history.replaceState({ d: depthRef.current, dirs }, '')
+  }, [])
+
+  const pickVolume = useCallback((v: Volume) => {
+    initialDirsRef.current = null
+    setStack((st) => [...st, { t: 'explorer', root: v.path }])
+    depthRef.current += 1
+    history.pushState({ d: depthRef.current, dirs: [v.path] }, '')
   }, [])
 
   const openFile = useCallback((entry: Entry, forceKind?: 'text') => {
@@ -146,11 +179,25 @@ export default function App() {
   return (
     <div className="app">
       {top === undefined ? (
+        <Home
+          volumes={volumes}
+          loading={volsLoading}
+          onPick={pickVolume}
+          onRefresh={refreshVolumes}
+        />
+      ) : top.t === 'explorer' ? (
         <Explorer
+          root={top.root}
+          initialDirs={initialDirsRef.current ?? undefined}
           volumes={volumes}
           clipboard={clipboard}
           setClipboard={setClipboard}
           onOpenFile={openFile}
+          onExit={goBack}
+          pushDirNav={pushDirNav}
+          replaceDirNav={replaceDirNav}
+          registerNav={registerNav}
+          registerGuard={registerGuard}
           toast={toast}
           refreshVolumes={refreshVolumes}
         />

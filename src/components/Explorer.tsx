@@ -6,10 +6,17 @@ import { basename, dirname, formatSize, formatTime, joinPath, sortEntries, type 
 import { BottomSheet, ConfirmDialog, Icon, Modal, PATHS, PromptDialog, type SheetAction } from '../ui'
 
 interface Props {
+  root: string
+  initialDirs?: string[]
   volumes: Volume[]
   clipboard: Clipboard | null
   setClipboard: (c: Clipboard | null) => void
   onOpenFile: (entry: Entry, forceKind?: 'text') => void
+  onExit: () => void
+  pushDirNav: (dirs: string[]) => void
+  replaceDirNav: (dirs: string[]) => void
+  registerNav: (n: { apply: (dirs: string[]) => void; currentDirs: () => string[] } | null) => void
+  registerGuard: (fn: (() => boolean) | null) => void
   toast: (msg: string) => void
   refreshVolumes: () => void
 }
@@ -21,10 +28,14 @@ type Dialog =
   | { d: 'info'; target: Entry }
 
 export default function Explorer(props: Props) {
-  const { volumes, clipboard, setClipboard, onOpenFile, toast, refreshVolumes } = props
-  const [root, setRoot] = useState<string>(() => volumes[0]?.path ?? '/')
-  const [stack, setStack] = useState<string[]>([])
-  const [dir, setDir] = useState<string>(volumes[0]?.path ?? '/')
+  const {
+    root: rootProp, initialDirs, volumes, clipboard, setClipboard, onOpenFile, onExit,
+    pushDirNav, replaceDirNav, registerNav, registerGuard, toast, refreshVolumes,
+  } = props
+  const initDirs = initialDirs ?? []
+  const [root, setRoot] = useState<string>(rootProp)
+  const [dirStack, setDirStack] = useState<string[]>(initDirs.slice(0, -1))
+  const [dir, setDir] = useState<string>(initDirs.length ? initDirs[initDirs.length - 1] : rootProp)
   const [entries, setEntries] = useState<Entry[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -38,6 +49,7 @@ export default function Explorer(props: Props) {
   const [dialog, setDialog] = useState<Dialog>(null)
   const [sheetFor, setSheetFor] = useState<Entry | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const selectionMode = selected.size > 0
   const [sortMenu, setSortMenu] = useState(false)
   const [moreMenu, setMoreMenu] = useState(false)
   const longPress = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -63,42 +75,68 @@ export default function Explorer(props: Props) {
 
   useEffect(() => { load(dir) }, [dir, load])
 
-  // USB 卷变化：刷新卷列表；当前目录失效则退回根
+  // USB 卷变化：刷新卷列表；当前目录失效则退回主页
   useEffect(() => {
     let un: (() => void) | undefined
     api.onVolumesChanged(() => {
       refreshVolumes()
       if (dir.startsWith('/storage')) {
         api.statPath(dir).catch(() => {
-          const r = volumes[0]?.path ?? '/'
-          setRoot(r); setStack([]); setDir(r)
           toast('当前目录的存储卷已移除')
+          onExit()
         })
       }
     }).then((u) => (un = u))
     return () => un?.()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dir, volumes])
+  }, [dir, refreshVolumes, onExit])
+
+  /* 返回键弹出目录栈：popstate 携带目标位置完整目录链 */
+  useEffect(() => {
+    registerNav({
+      apply: (dirs: string[]) => {
+        setSelected(new Set())
+        setSheetFor(null)
+        setDirStack(dirs.slice(0, -1))
+        setDir(dirs.length ? dirs[dirs.length - 1] : root)
+      },
+      currentDirs: () => [...dirStack, dir],
+    })
+    return () => registerNav(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dirStack, dir, root, registerNav])
+
+  /* 多选模式下，返回键先退出多选 */
+  useEffect(() => {
+    if (!selectionMode) return
+    registerGuard(() => {
+      setSelected(new Set())
+      return true
+    })
+    return () => registerGuard(null)
+  }, [selectionMode, registerGuard])
 
   const navigate = (p: string, pushHistory = true) => {
     setSelected(new Set())
     setSheetFor(null)
-    if (pushHistory) setStack((s) => [...s, dir])
+    if (pushHistory) {
+      setDirStack([...dirStack, dir])
+      pushDirNav([...dirStack, dir, p])
+    }
     setDir(p)
   }
 
   const goBack = () => {
     setSelected(new Set())
     if (searchHits) { setSearchHits(null); setQuery(''); return }
-    if (stack.length) {
-      const s = [...stack]
-      const prev = s.pop()!
-      setStack(s)
-      setDir(prev)
-    }
+    if (dirStack.length) { history.back(); return }
+    onExit()
   }
 
-  const canBack = stack.length > 0 || searchHits !== null
+  const switchRoot = (p: string) => {
+    setRoot(p); setDirStack([]); setDir(p)
+    replaceDirNav([])
+  }
 
   const crumbs = useMemo(() => {
     const rel = dir.startsWith(root) ? dir.slice(root.length) : dir
@@ -173,11 +211,6 @@ export default function Explorer(props: Props) {
 
   /* ------- 选择 ------- */
 
-  const selectionMode = selected.size > 0
-  const selectedEntries = useMemo(
-    () => entries.filter((e) => selected.has(e.path)),
-    [entries, selected],
-  )
   const toggleSelect = (e: Entry) => {
     setSelected((s) => {
       const n = new Set(s)
@@ -187,6 +220,10 @@ export default function Explorer(props: Props) {
     })
   }
   const selectAll = () => setSelected(new Set(visible.map((e) => e.path)))
+  const selectedEntries = useMemo(
+    () => entries.filter((e) => selected.has(e.path)),
+    [entries, selected],
+  )
 
   /* ------- 手势 ------- */
 
@@ -196,8 +233,8 @@ export default function Explorer(props: Props) {
       longPress.current = null
       if (navigator.vibrate) navigator.vibrate(10)
       if (selectionMode) toggleSelect(e)
-      else setSheetFor(e)
-    }, 480)
+      else setSelected(new Set([e.path]))
+    }, 400)
   }
   const cancelLongPress = () => {
     if (longPress.current) { clearTimeout(longPress.current); longPress.current = null }
@@ -264,32 +301,45 @@ export default function Explorer(props: Props) {
     <div className="explorer">
       {/* 顶栏 */}
       <header className="topbar">
-        <button className="icon-btn" onClick={() => setDrawerOpen(true)} aria-label="存储源">
-          <Icon d={PATHS.menu} />
-        </button>
-        {canBack ? (
-          <button className="icon-btn" onClick={goBack} aria-label="返回"><Icon d={PATHS.back} /></button>
-        ) : <span className="icon-btn" />}
-        {searchOpen ? (
-          <input
-            autoFocus className="search-input" value={query}
-            placeholder={`在 ${basename(dir) || dir} 中搜索…`}
-            onChange={(e) => setQuery(e.target.value)}
-          />
+        {selectionMode ? (
+          <>
+            <button className="icon-btn" onClick={() => setSelected(new Set())} aria-label="退出多选">
+              <Icon d={PATHS.close} />
+            </button>
+            <div className="editor-title">
+              <span className="row-name">已选 {selected.size} 项</span>
+            </div>
+          </>
         ) : (
-          <div className="crumbs">
-            {crumbs.map((c, i) => (
-              <span key={c.path} className="crumb-wrap">
-                {i > 0 && <span className="crumb-sep">/</span>}
-                <button className="crumb" onClick={() => navigate(c.path)}>{c.name}</button>
-              </span>
-            ))}
-          </div>
+          <>
+            <button className="icon-btn" onClick={() => setDrawerOpen(true)} aria-label="存储源">
+              <Icon d={PATHS.menu} />
+            </button>
+            <button className="icon-btn" onClick={goBack} aria-label="返回"><Icon d={PATHS.back} /></button>
+            {searchOpen ? (
+              <input
+                autoFocus className="search-input" value={query}
+                placeholder={`在 ${basename(dir) || dir} 中搜索…`}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            ) : (
+              <div className="crumbs">
+                {crumbs.map((c, i) => (
+                  <span key={c.path} className="crumb-wrap">
+                    {i > 0 && <span className="crumb-sep">/</span>}
+                    <button className="crumb" onClick={() => navigate(c.path)}>{c.name}</button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </>
         )}
-        <button className="icon-btn" onClick={() => { setSearchOpen((s) => !s); setQuery(''); setSearchHits(null) }}>
-          <Icon d={searchOpen ? PATHS.close : PATHS.search} />
-        </button>
-        <button className="icon-btn" onClick={() => setSortMenu(true)}><Icon d={PATHS.sort} /></button>
+        {!selectionMode && (
+          <button className="icon-btn" onClick={() => { setSearchOpen((s) => !s); setQuery(''); setSearchHits(null) }}>
+            <Icon d={searchOpen ? PATHS.close : PATHS.search} />
+          </button>
+        )}
+        {!selectionMode && <button className="icon-btn" onClick={() => setSortMenu(true)}><Icon d={PATHS.sort} /></button>}
         <button className="icon-btn" onClick={() => setMoreMenu(true)}><Icon d={PATHS.more} /></button>
       </header>
 
@@ -305,7 +355,7 @@ export default function Explorer(props: Props) {
                   key={v.path}
                   className={`drawer-item ${v.path === root ? 'active' : ''}`}
                   onClick={() => {
-                    setRoot(v.path); setStack([]); setDir(v.path)
+                    switchRoot(v.path)
                     setDrawerOpen(false)
                   }}
                 >
@@ -326,14 +376,17 @@ export default function Explorer(props: Props) {
       )}
 
       {/* 内容区 */}
-      <main className="list" onClick={() => { if (selectionMode) setSelected(new Set()) }}>
+      <main
+        className={`list ${selectionMode ? 'selecting' : ''}`}
+        onClick={() => { if (selectionMode) setSelected(new Set()) }}
+      >
         {loading && <div className="hint">加载中…</div>}
         {error && !loading && (
           <div className="error-box">
             <div>{error}</div>
             <div className="error-actions">
               <button className="btn primary" onClick={() => load(dir)}>重试</button>
-              <button className="btn ghost" onClick={() => { setRoot(volumes[0]?.path ?? '/'); setStack([]); setDir(volumes[0]?.path ?? '/') }}>回到根目录</button>
+              <button className="btn ghost" onClick={() => switchRoot(rootProp)}>回到根目录</button>
             </div>
           </div>
         )}
@@ -357,7 +410,9 @@ export default function Explorer(props: Props) {
               onClick={(ev) => { ev.stopPropagation(); rowClick(e) }}
               onContextMenu={(ev) => { ev.preventDefault(); suppressClick.current = true; setSheetFor(e) }}
             >
-              <span className="row-check">{isSel ? <Icon d={PATHS.check} size={18} /> : null}</span>
+              <span className={`row-check ${isSel ? 'on' : ''}`}>
+                {isSel ? <Icon d={PATHS.check} size={14} /> : null}
+              </span>
               <span
                 className="row-icon"
                 style={{ background: `${KIND_COLORS[kind]}22`, color: KIND_COLORS[kind] }}
@@ -435,7 +490,7 @@ export default function Explorer(props: Props) {
             <button className="opt" onClick={() => { setMoreMenu(false); setDialog({ d: 'newFile' }) }}>
               <Icon d={PATHS.file} size={18} /> 新建文本文件
             </button>
-            <button className="opt" onClick={() => { setMoreMenu(false); if (selectionMode) selectAll() }}>
+            <button className="opt" onClick={() => { setMoreMenu(false); selectAll() }}>
               <Icon d={PATHS.check} size={18} /> 全选
             </button>
           </div>

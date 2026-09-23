@@ -1,0 +1,138 @@
+name: Android Build
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+concurrency:
+  group: android-build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 12.5.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Ensure Android NDK
+        run: |
+          sdkmanager --install "platforms;android-36" "build-tools;36.0.0" > /dev/null 2>&1 || true
+          if [ -z "$(ls -A "$ANDROID_HOME/ndk" 2>/dev/null)" ]; then
+            sdkmanager --install "ndk;27.0.12077973" > /dev/null
+          fi
+          NDK_HOME="$ANDROID_HOME/ndk/$(ls "$ANDROID_HOME/ndk" | head -n1)"
+          echo "NDK_HOME=$NDK_HOME" >> "$GITHUB_ENV"
+
+      - name: Setup Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          targets: aarch64-linux-android armv7-linux-androideabi
+          workspaces: src-tauri
+
+      - name: Setup Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Setup Android signing
+        env:
+          ANDROID_KEY_BASE64: ${{ secrets.ANDROID_KEY_BASE64 }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          cd src-tauri/gen/android
+          if [ -n "$ANDROID_KEY_BASE64" ]; then
+            echo "keyAlias=$ANDROID_KEY_ALIAS" > keystore.properties
+            echo "password=$ANDROID_KEY_PASSWORD" >> keystore.properties
+            base64 -d <<< "$ANDROID_KEY_BASE64" > "$RUNNER_TEMP/keystore.jks"
+            echo "storeFile=$RUNNER_TEMP/keystore.jks" >> keystore.properties
+          else
+            keytool -genkeypair -v \
+              -keystore "$RUNNER_TEMP/debug.keystore" \
+              -storepass android -keypass android \
+              -alias androiddebugkey \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US" > /dev/null
+            echo "keyAlias=androiddebugkey" > keystore.properties
+            echo "password=android" >> keystore.properties
+            echo "storeFile=$RUNNER_TEMP/debug.keystore" >> keystore.properties
+          fi
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Android APK (arm64 + armv7)
+        run: pnpm tauri android build --apk --target aarch64 --target armv7
+
+      - name: Stage release artifacts
+        run: |
+          APP_VERSION="$(node -p "require('./src-tauri/tauri.conf.json').version")"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            APP_VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          APP_NAME="$(node -p "require('./src-tauri/tauri.conf.json').productName")"
+          mkdir -p release-assets
+          find src-tauri/gen/android/app/build/outputs/apk -name "*.apk" -type f | while read -r apk; do
+            variant="$(basename "$(dirname "$apk")")"
+            case "$variant" in
+              universalRelease) abi="universal" ;;
+              arm64Release)     abi="arm64-v8a" ;;
+              armRelease)       abi="armeabi-v7a" ;;
+              x86Release)       abi="x86" ;;
+              x86_64Release)    abi="x86_64" ;;
+              *)                abi="$variant" ;;
+            esac
+            safe_name="$(echo "$APP_NAME" | tr ' ' '_')"
+            cp "$apk" "release-assets/${safe_name}-${APP_VERSION}-${abi}.apk"
+          done
+          ls -la release-assets
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk-${{ github.ref_name }}
+          path: release-assets/*.apk
+          if-no-files-found: error
+
+      - name: Create GitHub Release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          name: USB文件浏览器 ${{ github.ref_name }}
+          body: |
+            > ⚠️ **测试版（Beta）** — 正式版发布前，所有构建均标记为测试版，可能存在稳定性或功能问题。
+
+            ## 下载说明
+            - `universal` APK 同时包含 arm64-v8a 与 armeabi-v7a 架构，适合大多数 Android 设备（Android 11+）
+            - 安装前请卸载旧版本（签名不同会导致安装失败）
+          files: release-assets/*.apk
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          generate_release_notes: true

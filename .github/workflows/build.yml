@@ -93,28 +93,35 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build Android APK (arm64 + armv7)
-        run: pnpm tauri android build --apk --target aarch64 --target armv7
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            VER="${GITHUB_REF_NAME#v}"
+            pnpm tauri android build --apk --target aarch64 --target armv7 \
+              -c "{\"version\":\"$VER\"}"
+          else
+            pnpm tauri android build --apk --target aarch64 --target armv7
+          fi
 
       - name: Stage release artifacts
         run: |
-          APP_VERSION="$(node -p "require('./src-tauri/tauri.conf.json').version")"
           if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
             APP_VERSION="${GITHUB_REF_NAME#v}"
+          else
+            APP_VERSION="$(node -p "require('./src-tauri/tauri.conf.json').version")"
           fi
-          APP_NAME="$(node -p "require('./src-tauri/tauri.conf.json').productName")"
+          APP_ID="$(node -p "require('./package.json').name")"
           mkdir -p release-assets
           find src-tauri/gen/android/app/build/outputs/apk -name "*.apk" -type f | while read -r apk; do
-            variant="$(basename "$(dirname "$apk")")"
+            variant="$(basename "$(dirname "$(dirname "$apk")")")"
             case "$variant" in
-              universalRelease) abi="universal" ;;
-              arm64Release)     abi="arm64-v8a" ;;
-              armRelease)       abi="armeabi-v7a" ;;
-              x86Release)       abi="x86" ;;
-              x86_64Release)    abi="x86_64" ;;
-              *)                abi="$variant" ;;
+              universal) abi="universal" ;;
+              arm64)     abi="arm64-v8a" ;;
+              arm)       abi="armeabi-v7a" ;;
+              x86)       abi="x86" ;;
+              x86_64)    abi="x86_64" ;;
+              *)         abi="$variant" ;;
             esac
-            safe_name="$(echo "$APP_NAME" | tr ' ' '_')"
-            cp "$apk" "release-assets/${safe_name}-${APP_VERSION}-${abi}.apk"
+            cp "$apk" "release-assets/${APP_ID}-${APP_VERSION}-${abi}.apk"
           done
           ls -la release-assets
 

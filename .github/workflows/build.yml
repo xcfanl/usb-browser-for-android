@@ -47,7 +47,7 @@ jobs:
           ls -A "$ANDROID_HOME/cmdline-tools"
           CLT="$(ls -A "$ANDROID_HOME"/cmdline-tools | sort -V | tail -n1)"
           echo "$ANDROID_HOME/cmdline-tools/$CLT/bin" >> "$GITHUB_PATH"
-          sdkmanager --version
+          "$ANDROID_HOME/cmdline-tools/$CLT/bin/sdkmanager" --version
 
       - name: Ensure Android NDK
         run: |

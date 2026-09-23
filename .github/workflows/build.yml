@@ -41,8 +41,15 @@ jobs:
           distribution: temurin
           java-version: 21
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Setup Android SDK environment
+        run: |
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+          if [ -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
+            echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          else
+            echo "$(ls -d "$ANDROID_HOME"/cmdline-tools/* | sort -V | tail -n1)/bin" >> "$GITHUB_PATH"
+          fi
+          sdkmanager --version
 
       - name: Ensure Android NDK
         run: |

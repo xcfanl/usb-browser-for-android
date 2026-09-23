@@ -48,7 +48,6 @@ export function MarkdownView({ path }: ViewerProps) {
       import('react-markdown'),
       import('remark-gfm'),
       import('rehype-highlight'),
-      import('highlight.js/styles/github-dark.css'),
     ]).then(([rm, gfm, rh]) => {
       if (alive) setMods({ MD: rm.default, gfm: gfm.default, hl: rh.default })
     })

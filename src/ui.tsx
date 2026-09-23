@@ -7,7 +7,8 @@ export function Icon({ d, size = 22, color, className }: {
   return (
     <svg
       viewBox="0 0 24 24" width={size} height={size} className={className}
-      fill={color ?? 'currentColor'} aria-hidden
+      style={color ? { fill: color } : undefined}
+      fill={color ? undefined : 'currentColor'} aria-hidden
     >
       <path d={d} />
     </svg>

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Clipboard, Entry, Volume } from '../types'
 import * as api from '../api'
-import { classify, iconFor, KIND_COLORS, mimeFor } from '../fileTypes'
+import { classify, iconFor, mimeFor } from '../fileTypes'
 import { basename, dirname, formatSize, formatTime, joinPath, sortEntries, type SortBy } from '../utils'
 import { BottomSheet, ConfirmDialog, Icon, Modal, PATHS, PromptDialog, type SheetAction } from '../ui'
 
@@ -326,7 +326,7 @@ export default function Explorer(props: Props) {
               <div className="crumbs">
                 {crumbs.map((c, i) => (
                   <span key={c.path} className="crumb-wrap">
-                    {i > 0 && <span className="crumb-sep">/</span>}
+                    {i > 0 && <span className="crumb-sep">›</span>}
                     <button className="crumb" onClick={() => navigate(c.path)}>{c.name}</button>
                   </span>
                 ))}
@@ -413,11 +413,8 @@ export default function Explorer(props: Props) {
               <span className={`row-check ${isSel ? 'on' : ''}`}>
                 {isSel ? <Icon d={PATHS.check} size={14} /> : null}
               </span>
-              <span
-                className="row-icon"
-                style={{ background: `${KIND_COLORS[kind]}22`, color: KIND_COLORS[kind] }}
-              >
-                <Icon d={iconFor(e, kind)} size={20} />
+              <span className={`row-icon kind-${kind}`}>
+                <Icon d={iconFor(e, kind)} size={19} />
               </span>
               <div className="row-main">
                 <div className="row-name">

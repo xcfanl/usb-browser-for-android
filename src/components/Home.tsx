@@ -2,12 +2,6 @@ import type { Volume } from '../types'
 import { formatSize } from '../utils'
 import { Icon, PATHS } from '../ui'
 
-const VOL_COLORS: Record<string, string> = {
-  internal: '#4fc3f7',
-  removable: '#66bb6a',
-  system: '#ffb74d',
-}
-
 export default function Home({ volumes, onPick, onRefresh, loading }: {
   volumes: Volume[]
   onPick: (v: Volume) => void
@@ -30,11 +24,10 @@ export default function Home({ volumes, onPick, onRefresh, loading }: {
           const pct = v.total_bytes > 0
             ? Math.round(((v.total_bytes - v.available_bytes) / v.total_bytes) * 100)
             : 0
-          const color = VOL_COLORS[v.kind] ?? '#4fc3f7'
           return (
             <button key={v.path} className="vol-card" onClick={() => onPick(v)}>
-              <span className="vol-icon" style={{ background: `${color}22`, color }}>
-                <Icon d={v.kind === 'removable' ? PATHS.usb : PATHS.home} size={24} />
+              <span className={`vol-icon k-${v.kind}`}>
+                <Icon d={v.kind === 'removable' ? PATHS.usb : PATHS.home} size={23} />
               </span>
               <div className="vol-main">
                 <div className="row-name">{v.name}</div>

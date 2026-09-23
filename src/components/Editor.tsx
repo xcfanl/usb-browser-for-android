@@ -168,7 +168,7 @@ export default function Editor({ path, registerGuard, goBack, toast }: {
         <button className="icon-btn" onClick={() => setFontSize((f) => Math.max(11, f - 1))}>A-</button>
         <button className="icon-btn" onClick={() => setFontSize((f) => Math.min(28, f + 1))}>A+</button>
         <button className="icon-btn" onClick={save} disabled={saving} aria-label="保存">
-          <Icon d={PATHS.save} color={dirty ? '#4fc3f7' : 'currentColor'} />
+          <Icon d={PATHS.save} color={dirty ? 'var(--accent)' : 'currentColor'} />
         </button>
       </header>
 

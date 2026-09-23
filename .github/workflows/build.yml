@@ -44,21 +44,17 @@ jobs:
       - name: Setup Android SDK environment
         run: |
           echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
-          if [ -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
-            echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
-          else
-            echo "$(ls -d "$ANDROID_HOME"/cmdline-tools/* | sort -V | tail -n1)/bin" >> "$GITHUB_PATH"
-          fi
+          ls -A "$ANDROID_HOME/cmdline-tools"
+          CLT="$(ls -A "$ANDROID_HOME"/cmdline-tools | sort -V | tail -n1)"
+          echo "$ANDROID_HOME/cmdline-tools/$CLT/bin" >> "$GITHUB_PATH"
           sdkmanager --version
 
       - name: Ensure Android NDK
         run: |
-          sdkmanager --install "platforms;android-36" "build-tools;36.0.0" > /dev/null 2>&1 || true
-          if [ -z "$(ls -A "$ANDROID_HOME/ndk" 2>/dev/null)" ]; then
-            sdkmanager --install "ndk;27.0.12077973" > /dev/null
-          fi
-          NDK_HOME="$ANDROID_HOME/ndk/$(ls "$ANDROID_HOME/ndk" | head -n1)"
+          ls -A "$ANDROID_HOME/ndk" || sdkmanager --install "ndk;27.3.13750724"
+          NDK_HOME="$ANDROID_HOME/ndk/$(ls -A "$ANDROID_HOME/ndk" | sort -V | tail -n1)"
           echo "NDK_HOME=$NDK_HOME" >> "$GITHUB_ENV"
+          echo "Using NDK: $NDK_HOME"
 
       - name: Setup Rust toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1

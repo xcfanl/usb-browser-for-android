@@ -35,11 +35,13 @@ class MainActivity : TauriActivity() {
       val bars = insets.getInsets(
         WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
       )
+      // WebView 的 CSS px = dp，需从物理像素换算，否则安全区会放大屏幕密度倍
+      val density = resources.displayMetrics.density
       insetsJson = JSONObject()
-        .put("t", bars.top)
-        .put("b", bars.bottom)
-        .put("l", bars.left)
-        .put("r", bars.right)
+        .put("t", Math.round(bars.top / density))
+        .put("b", Math.round(bars.bottom / density))
+        .put("l", Math.round(bars.left / density))
+        .put("r", Math.round(bars.right / density))
         .toString()
       pushInsets()
       insets

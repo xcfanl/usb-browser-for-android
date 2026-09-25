@@ -133,9 +133,25 @@ pub fn request_all_files_access<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
     }
 }
 
-/// 通过系统“打开方式”打开文件（FileProvider）
+/// 通过系统“打开方式”打开文件（FileProvider）。U 盘直接模式的文件先复制到缓存再打开。
 #[tauri::command]
-pub fn open_with_system<R: tauri::Runtime>(app: tauri::AppHandle<R>, path: String, mime: String) {
+pub async fn open_with_system(
+    app: tauri::AppHandle,
+    path: String,
+    mime: String,
+) -> Result<(), String> {
+    let path = match crate::usb::parse_raw(&path) {
+        Some(rp) => crate::usb::materialize(&app, &rp)
+            .await?
+            .to_string_lossy()
+            .into_owned(),
+        None => path,
+    };
+    open_with_system_local(app, path, mime);
+    Ok(())
+}
+
+fn open_with_system_local<R: tauri::Runtime>(app: tauri::AppHandle<R>, path: String, mime: String) {
     #[cfg(target_os = "android")]
     {
         use jni::objects::JValue;
@@ -158,7 +174,11 @@ pub fn open_with_system<R: tauri::Runtime>(app: tauri::AppHandle<R>, path: Strin
                         &[activity.into(), JValue::Object(&jauth), JValue::Object(&jfile)],
                     )?
                     .l()?;
-                let jmime = env.new_string(if mime.is_empty() { "*/*" } else { mime.as_str() })?;
+                let jmime = env.new_string(if mime.is_empty() {
+                    "*/*"
+                } else {
+                    mime.as_str()
+                })?;
                 let intent = env.new_object(
                     "android/content/Intent",
                     "(Ljava/lang/String;Landroid/net/Uri;)V",

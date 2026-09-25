@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "USB文件浏览器",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "identifier": "com.usbfile.browser",
   "build": {
     "beforeDevCommand": "pnpm dev",

@@ -81,8 +81,7 @@ internal object Fat32Formatter {
     val bps = l.bps
 
     // 1. wipe partition table area (MBR + old GPT header/entries) and the GPT backup at the end
-    zero(raw, 0, l.start)
-    zero(raw, raw.blocks - 34, 34)
+    Mbr.wipe(raw, l.start)
 
     // 2. reserved area + both FATs + root directory cluster
     val dataStart = l.start + l.reserved + NUM_FATS * l.fatSize
@@ -118,7 +117,7 @@ internal object Fat32Formatter {
     }
 
     // 6. MBR last, so an interrupted format never leaves a valid-looking volume
-    write(raw, 0, mbr(l))
+    Mbr.write(raw, l.start, l.sectors, 0x0C) // FAT32 LBA
   }
 
   private fun sector(bps: Int): ByteBuffer = ByteBuffer.allocate(bps).order(ByteOrder.LITTLE_ENDIAN)
@@ -128,7 +127,7 @@ internal object Fat32Formatter {
     raw.write(lba, buf)
   }
 
-  private fun zero(raw: BlockDeviceDriver, lba: Long, count: Long) {
+  internal fun zero(raw: BlockDeviceDriver, lba: Long, count: Long) {
     if (count <= 0) return
     val bps = raw.blockSize
     val chunkSectors = maxOf(1, (64 * 1024) / bps)
@@ -187,17 +186,28 @@ internal object Fat32Formatter {
     return b
   }
 
-  private fun mbr(l: Layout): ByteBuffer {
-    val b = sector(l.bps)
+}
+
+/** Single-partition MBR helpers shared by the formatters. [raw] is LBA addressed. */
+internal object Mbr {
+  /** Zeroes everything before the partition (MBR, old GPT header/entries) and the backup GPT. */
+  fun wipe(raw: BlockDeviceDriver, partStart: Long) {
+    Fat32Formatter.zero(raw, 0, partStart)
+    if (raw.blocks > partStart + 34) Fat32Formatter.zero(raw, raw.blocks - 34, 34)
+  }
+
+  /** Writes an MBR with one partition of [type] (0x0C FAT32 LBA, 0x07 exFAT/NTFS). */
+  fun write(raw: BlockDeviceDriver, start: Long, sectors: Long, type: Int) {
+    val b = ByteBuffer.allocate(raw.blockSize).order(ByteOrder.LITTLE_ENDIAN)
     val e = 446
     b.put(e, 0x00) // not bootable
     b.put(e + 1, 0xFE.toByte()); b.put(e + 2, 0xFF.toByte()); b.put(e + 3, 0xFF.toByte()) // CHS: use LBA
-    b.put(e + 4, 0x0C) // FAT32 LBA
+    b.put(e + 4, type.toByte())
     b.put(e + 5, 0xFE.toByte()); b.put(e + 6, 0xFF.toByte()); b.put(e + 7, 0xFF.toByte())
-    b.putInt(e + 8, l.start.toInt())
-    b.putInt(e + 12, l.sectors.toInt())
+    b.putInt(e + 8, start.toInt())
+    b.putInt(e + 12, sectors.toInt())
     b.putInt(440, Random.nextInt()) // disk signature
     b.put(510, 0x55); b.put(511, 0xAA.toByte())
-    return b
+    raw.write(0, b)
   }
 }

@@ -245,7 +245,7 @@ class UsbStoragePlugin(private val activity: Activity) : Plugin(activity) {
         val drive = drives[d.deviceId]
         if (drive != null) drive.describe(o) else {
           o.put("opened", false); o.put("mounted", false); o.put("fsType", ""); o.put("label", "")
-          o.put("readOnly", true); o.put("capacity", 0L); o.put("free", 0L); o.put("deviceBytes", 0L)
+          o.put("readOnly", true); o.put("readOnlyReason", ""); o.put("capacity", 0L); o.put("free", 0L); o.put("deviceBytes", 0L)
           o.put("error", ""); o.put("root", "/usbraw/${d.deviceId}")
         }
         devs.put(o)
@@ -372,7 +372,7 @@ class UsbStoragePlugin(private val activity: Activity) : Plugin(activity) {
     val a = invoke.getArgs()
     bg(invoke) {
       val (d, fs) = fsOf(a)
-      if (fs.readOnly) throw UserError("${fs.typeName} 在直接模式下为只读")
+      if (fs.readOnly) throw UserError(fs.readOnlyReason.ifEmpty { "${fs.typeName} 在直接模式下为只读" })
       try {
         importRec(fs, File(a.getString("src", "") ?: ""), a.getString("path", "") ?: "", 0)
       } finally {

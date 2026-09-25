@@ -83,10 +83,11 @@ class UsbFsTest {
     try { fs.mkdir("/x"); fail("ext must be read-only") } catch (e: Exception) { }
   }
 
-  @Test fun ntfsReadOnly() {
+  @Test fun ntfsDetected() {
     val fs = probe(image("ntfs_mbr.img"))
     assertEquals("NTFS", fs.typeName)
-    assertTrue(fs.readOnly)
+    // native ntfs-3g (read-write) when libusbfs is loaded, java-fs (read-only) otherwise
+    assertEquals(!NativeFs.available, fs.readOnly)
     checkContent(fs, false)
     assertFalse(fs.list("/").any { it.name.startsWith("$") })
   }
@@ -94,7 +95,7 @@ class UsbFsTest {
   @Test fun exfatPartitioned() {
     val fs = probe(image("exfat_mbr.img"))
     assertEquals("exFAT", fs.typeName)
-    assertTrue(fs.readOnly)
+    assertEquals(!NativeFs.available, fs.readOnly)
     assertEquals("EXFATVOL", fs.label)
     fs.list("/")
     assertTrue(fs.capacity() > 100L shl 20)

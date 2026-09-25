@@ -10,6 +10,32 @@ android {
     defaultConfig {
         minSdk = 24
         consumerProguardFiles("consumer-rules.pro")
+        ndk {
+            // the app's abiFilters (set by the Tauri CLI from --target) decide what is packaged
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64", "x86")
+        }
+        externalNativeBuild {
+            cmake {
+                arguments += listOf("-DANDROID_STL=none")
+            }
+        }
+    }
+
+    // libusbfs.so: exFAT (relan/exfat) + NTFS (ntfs-3g), see src/main/cpp
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
+    }
+    // Pinned NDK when installed (it is on GitHub's ubuntu runners); otherwise the NDK that the
+    // Tauri build uses (NDK_HOME, exported by the CI workflow), otherwise AGP's default.
+    val sdkDir = System.getenv("ANDROID_HOME") ?: System.getenv("ANDROID_SDK_ROOT")
+    val pinnedNdk = "27.3.13750724"
+    if (sdkDir != null && file("$sdkDir/ndk/$pinnedNdk").isDirectory) {
+        ndkVersion = pinnedNdk
+    } else {
+        System.getenv("NDK_HOME")?.takeIf { file(it).isDirectory }?.let { ndkPath = it }
     }
 
     compileOptions {
@@ -42,4 +68,6 @@ tasks.withType<Test>().configureEach {
     // java-fs uses java.security.acl (present on Android, removed from desktop JDK 14+):
     // point USBFS_TEST_JAVA at a JDK/JRE 11 "java" binary to run the ext/NTFS tests.
     System.getenv("USBFS_TEST_JAVA")?.let { executable = it }
+    // host build of libusbfs.so (scripts/build-native-host.sh) for the exFAT/NTFS tests
+    System.getenv("USBFS_NATIVE_LIB")?.let { systemProperty("usbfs.native.lib", it) }
 }

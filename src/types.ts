@@ -52,6 +52,8 @@ export interface UsbDev {
   fsType: string
   label: string
   readOnly: boolean
+  /** why a normally writable volume is read-only (e.g. hibernated Windows) */
+  readOnlyReason?: string
   capacity: number
   free: number
   deviceBytes: number

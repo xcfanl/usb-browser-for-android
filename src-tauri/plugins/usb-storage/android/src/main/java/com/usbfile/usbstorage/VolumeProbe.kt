@@ -56,7 +56,8 @@ internal object VolumeProbe {
     return entries.ifEmpty { listOf(PartitionTableEntry(0, 0, raw.blocks)) }
   }
 
-  fun probe(raw: BlockDeviceDriver): ProbeResult {
+  /** [syncCache] commits the drive's write cache (SCSI SYNCHRONIZE CACHE). */
+  fun probe(raw: BlockDeviceDriver, syncCache: () -> Unit = {}): ProbeResult {
     val bs = raw.blockSize
     var detected = ""
     var lastError = ""
@@ -78,7 +79,20 @@ internal object VolumeProbe {
           lastError = e.message ?: e.toString()
         }
       }
-      // 2. everything else via java-fs, read-only
+      // 2. exFAT / NTFS via the native libraries (read + write; read-only if unsafe to write)
+      if ((kind == "exFAT" || kind == "NTFS") && NativeFs.available) {
+        val type = if (kind == "NTFS") NativeFs.NTFS else NativeFs.EXFAT
+        val dev = ScsiPartitionDevice(raw, entry.logicalBlockAddress.toLong(), sectors, syncCache)
+        for (ro in listOf(false, true)) {
+          try {
+            return ProbeResult(NativeRawFs.mount(dev, type, entry.logicalBlockAddress.toLong(), ro), kind, "")
+          } catch (e: Throwable) {
+            Log.w(TAG, "native $kind mount (ro=$ro) failed", e)
+            lastError = e.message ?: e.toString()
+          }
+        }
+      }
+      // 3. everything else (and fallback) via java-fs, read-only
       val api = JnodeBlockApi(part, bs, sectors * bs)
       for ((name, type) in jnodeTypes()) {
         try {

@@ -89,7 +89,7 @@ internal class UsbDrive(private val usb: UsbManager, val device: UsbDevice) {
     fs?.let { runCatching { it.close() } }
     fs = null
     val r = raw ?: throw UserError("U 盘未打开")
-    val res = VolumeProbe.probe(r)
+    val res = VolumeProbe.probe(r) { synchronizeCache() }
     fs = res.fs
     detected = res.detected
     error = res.error
@@ -105,11 +105,22 @@ internal class UsbDrive(private val usb: UsbManager, val device: UsbDevice) {
   fun requireFs(): RawFs = fs ?: throw UserError(if (error.isNotEmpty()) error else "U 盘未以直接模式打开")
 
   fun format(type: String, label: String) {
-    if (type.lowercase() != "fat32") throw UserError("暂不支持格式化为 $type（直接模式目前只能格式化为 FAT32）")
     val r = raw ?: throw UserError("U 盘未打开")
+    // validate everything before touching the drive
+    val kind = type.lowercase()
+    val lbl = when (kind) {
+      "fat32" -> Fat32Formatter.normalizeLabel(label).also { Fat32Formatter.plan(r.blockSize, r.blocks) }
+      "exfat", "ntfs" -> {
+        if (!NativeFs.available) throw UserError("原生 exFAT/NTFS 组件加载失败：${NativeFs.loadError}")
+        NativeFormatter.checkSize(r)
+        NativeFormatter.normalizeLabel(NativeFs.typeOf(kind), label)
+      }
+      else -> throw UserError("不支持格式化为 $type（可选 FAT32 / exFAT / NTFS）")
+    }
     fs?.let { runCatching { it.flush(); it.close() } }
     fs = null
-    Fat32Formatter.format(r, label)
+    if (kind == "fat32") Fat32Formatter.format(r, lbl)
+    else NativeFormatter.format(r, NativeFs.typeOf(kind), lbl) { synchronizeCache() }
     synchronizeCache()
     mount()
     if (fs == null) throw UserError("格式化已写入，但重新读取失败：$error")
@@ -122,7 +133,13 @@ internal class UsbDrive(private val usb: UsbManager, val device: UsbDevice) {
     } catch (e: Exception) {
       Log.w(TAG, "flush failed", e)
     }
-    fs?.let { runCatching { it.close() } }
+    fs?.let {
+      try {
+        it.close() // native file systems: unmount writes everything back and marks the volume clean
+      } catch (e: Exception) {
+        Log.w(TAG, "close failed", e)
+      }
+    }
     fs = null
     if (raw != null) synchronizeCache()
     raw = null
@@ -163,6 +180,7 @@ internal class UsbDrive(private val usb: UsbManager, val device: UsbDevice) {
     o.put("fsType", f?.typeName ?: detected)
     o.put("label", f?.label ?: "")
     o.put("readOnly", f?.readOnly ?: true)
+    o.put("readOnlyReason", f?.readOnlyReason ?: "")
     o.put("capacity", capacity)
     o.put("free", free)
     o.put("deviceBytes", raw?.let { it.blocks * it.blockSize } ?: 0L)

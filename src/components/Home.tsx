@@ -80,7 +80,7 @@ export default function Home({ volumes, usb, onPick, onRefresh, loading, toast }
     run(d.id, async () => {
       const r = await api.usbOpen(d.id)
       if (!r.mounted) throw new Error(r.error || '无法读取文件系统')
-      toast(`已通过直接模式打开（${r.fsType}${r.readOnly ? '，只读' : ''}）`)
+      toast(`已通过直接模式打开（${r.fsType}${r.readOnly ? '，只读' : '，可读写'}）${r.readOnly && r.readOnlyReason ? '：' + r.readOnlyReason : ''}`)
     })
 
   const pickDirect = (d: UsbDev) => {
@@ -125,7 +125,7 @@ export default function Home({ volumes, usb, onPick, onRefresh, loading, toast }
         )
         break
       case 'ready':
-        desc = '系统没有挂载此 U 盘（可能是系统不支持的格式，如 NTFS / ext4，或需要开启 OTG）。可用直接模式读取。'
+        desc = '系统没有挂载此 U 盘（可能是系统不支持的格式，如 NTFS / exFAT / ext4，或需要开启 OTG）。可用直接模式打开（FAT32 / exFAT / NTFS 可读写）。'
         actions = <button className="btn primary" disabled={isBusy} onClick={() => openDirect(d)}>{isBusy ? '正在打开…' : '直接读取打开'}</button>
         break
       case 'opened':
@@ -137,6 +137,7 @@ export default function Home({ volumes, usb, onPick, onRefresh, loading, toast }
               <span className={`usb-tag ${d.readOnly ? 'warn' : 'ok'}`}>{d.readOnly ? '只读' : '可读写'}</span>
               <span className="usb-tag">直接模式</span>
             </div>
+            {d.readOnly && d.readOnlyReason && <div className="usb-note">{d.readOnlyReason}</div>}
             <UsageBar total={d.capacity} free={d.free} />
           </>
         )

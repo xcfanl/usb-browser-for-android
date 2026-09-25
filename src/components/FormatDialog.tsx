@@ -6,11 +6,23 @@ import * as api from '../api'
 
 const CONFIRM_WORD = '格式化'
 
-const FS_OPTIONS: { key: string; label: string; enabled: boolean; note: string }[] = [
-  { key: 'fat32', label: 'FAT32', enabled: true, note: '兼容性最好（手机、电脑、车机、电视），单个文件不超过 4 GB' },
-  { key: 'exfat', label: 'exFAT', enabled: false, note: '暂不支持：目前没有许可证兼容且经过验证的 exFAT 格式化实现' },
-  { key: 'ntfs', label: 'NTFS', enabled: false, note: '暂不支持' },
+const FS_OPTIONS: { key: string; label: string; enabled: boolean; note: string; maxLabel: number }[] = [
+  { key: 'fat32', label: 'FAT32', enabled: true, maxLabel: 11, note: '兼容性最好（手机、电脑、车机、电视），单个文件不超过 4 GB' },
+  { key: 'exfat', label: 'exFAT', enabled: true, maxLabel: 11, note: '推荐用于大文件：无 4 GB 限制，Windows / macOS / 新款安卓均可读写' },
+  { key: 'ntfs', label: 'NTFS', enabled: true, maxLabel: 32, note: 'Windows 原生格式，无 4 GB 限制；macOS 默认只读，部分车机/电视不支持' },
 ]
+
+function labelError(fs: string, label: string): string {
+  const l = label.trim()
+  if (fs === 'fat32') {
+    return /^[A-Za-z0-9 _\-!#$%&'()@^`{}~]{0,11}$/.test(l) ? '' : 'FAT32 卷标最多 11 个字符，只能包含英文字母、数字、空格和 - _ 等符号'
+  }
+  const max = fs === 'exfat' ? 11 : 32
+  if (l.length > max) return `卷标最多 ${max} 个字符`
+  // eslint-disable-next-line no-control-regex
+  if (/["*/:<>?\\|\u0000-\u001f]/.test(l)) return '卷标不能包含 \\ / : * ? " < > | 等字符'
+  return ''
+}
 
 /** 强确认的格式化对话框：显示设备名/容量，选择文件系统与卷标，勾选并输入确认词。 */
 export default function FormatDialog({ dev, title, onCancel, onDone }: {
@@ -26,8 +38,9 @@ export default function FormatDialog({ dev, title, onCancel, onDone }: {
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
 
-  const labelOk = /^[A-Za-z0-9 _\-!#$%&'()@^`{}~]{0,11}$/.test(label)
-  const canGo = !busy && ack && word.trim() === CONFIRM_WORD && labelOk && fsType === 'fat32'
+  const opt = FS_OPTIONS.find((o) => o.key === fsType) ?? FS_OPTIONS[0]
+  const labelErr = labelError(fsType, label)
+  const canGo = !busy && ack && word.trim() === CONFIRM_WORD && !labelErr && opt.enabled
 
   const go = async () => {
     setBusy(true)
@@ -55,19 +68,22 @@ export default function FormatDialog({ dev, title, onCancel, onDone }: {
           <label key={o.key} className={`format-radio ${o.enabled ? '' : 'disabled'}`}>
             <input
               type="radio" name="fs" value={o.key} disabled={!o.enabled || busy}
-              checked={fsType === o.key} onChange={() => setFsType(o.key)}
+              checked={fsType === o.key}
+              onChange={() => { setFsType(o.key); if (o.key === 'fat32') setLabel(label.toUpperCase()) }}
             />
             <span><b>{o.label}</b><small>{o.note}</small></span>
           </label>
         ))}
       </div>
       <div className="format-field">
-        <div className="format-label">卷标（最多 11 个英文字母/数字）</div>
+        <div className="format-label">
+          卷标（{fsType === 'fat32' ? '最多 11 个英文字母/数字，自动转为大写' : `最多 ${opt.maxLabel} 个字符，可用中文`}）
+        </div>
         <input
-          className="input" value={label} maxLength={11} disabled={busy}
-          onChange={(e) => setLabel(e.target.value.toUpperCase())}
+          className="input" value={label} maxLength={opt.maxLabel} disabled={busy}
+          onChange={(e) => setLabel(fsType === 'fat32' ? e.target.value.toUpperCase() : e.target.value)}
         />
-        {!labelOk && <div className="format-error">卷标只能包含英文字母、数字、空格和 - _ 等符号</div>}
+        {labelErr && <div className="format-error">{labelErr}</div>}
       </div>
       <label className="format-check">
         <input type="checkbox" checked={ack} disabled={busy} onChange={(e) => setAck(e.target.checked)} />

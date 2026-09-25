@@ -21,6 +21,8 @@ internal interface RawFs {
   val typeName: String
   val label: String
   val readOnly: Boolean
+  /** Why a normally writable volume is read-only (e.g. hibernated Windows); empty otherwise. */
+  val readOnlyReason: String get() = ""
   fun capacity(): Long
   fun free(): Long
   fun list(path: String): List<RawEntry>

@@ -131,14 +131,15 @@ export default function Explorer(props: Props) {
   const crumbs = useMemo(() => {
     const rel = dir.startsWith(root) ? dir.slice(root.length) : dir
     const segs = rel.split('/').filter(Boolean)
-    const items: { name: string; path: string }[] = [{ name: basename(root) || root, path: root }]
+    const rootName = volumes.find((v) => v.path === root)?.name ?? (basename(root) || root)
+    const items: { name: string; path: string }[] = [{ name: rootName, path: root }]
     let acc = root === '/' ? '' : root
     for (const s of segs) {
       acc = acc === '' ? `/${s}` : `${acc}/${s}`
       items.push({ name: s, path: acc })
     }
     return items
-  }, [dir, root])
+  }, [dir, root, volumes])
 
   const openEntry = (e: Entry) => {
     if (e.is_dir) navigate(e.path)
@@ -339,7 +340,7 @@ export default function Explorer(props: Props) {
           <aside className="drawer" onClick={(e) => e.stopPropagation()}>
             <div className="drawer-title">存储位置</div>
             {volumes.map((v) => {
-              const pct = v.total_bytes > 0 ? Math.round(((v.total_bytes - v.available_bytes) / v.total_bytes) * 100) : 0
+              const pct = v.total_bytes > 0 && !v.free_unknown ? Math.round(((v.total_bytes - v.available_bytes) / v.total_bytes) * 100) : 0
               return (
                 <button
                   key={v.path}
@@ -355,7 +356,7 @@ export default function Explorer(props: Props) {
                   </div>
                   <div className="usage-bar"><div style={{ width: `${pct}%` }} /></div>
                   <div className="usage-text">
-                    {v.total_bytes > 0 ? `${formatSize(v.available_bytes)} 可用 / 共 ${formatSize(v.total_bytes)}` : ''}
+                    {v.total_bytes > 0 ? (v.free_unknown ? `共 ${formatSize(v.total_bytes)}` : `${formatSize(v.available_bytes)} 可用 / 共 ${formatSize(v.total_bytes)}`) : ''}
                   </div>
                 </button>
               )

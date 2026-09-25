@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- USB host (OTG) mode is used to talk to USB mass-storage devices directly.
+         required=false keeps the app installable on devices without USB host support. -->
+    <uses-feature android:name="android.hardware.usb.host" android:required="false" />
+</manifest>

@@ -1,0 +1,18 @@
+[package]
+name = "tauri-plugin-usb-storage"
+version = "0.1.0"
+description = "Android USB mass-storage access for USB文件浏览器: StorageManager volumes, UsbManager permission, direct (raw) read via libaums + java-fs, FAT32 format, eject"
+edition = "2021"
+license = "GPL-3.0-or-later"
+publish = false
+# tauri-plugin build helper requires `links` to match the crate name; tauri-build uses it
+# to include ./android as a Gradle module of the app (survives `tauri android init`).
+links = "tauri-plugin-usb-storage"
+
+[dependencies]
+tauri = { version = "2" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[build-dependencies]
+tauri-plugin = { version = "2", features = ["build"] }

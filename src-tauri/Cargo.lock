@@ -3598,6 +3598,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "tauri-plugin-usb-storage"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-plugin",
+]
+
+[[package]]
 name = "tauri-runtime"
 version = "2.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4159,7 +4169,7 @@ dependencies = [
 
 [[package]]
 name = "usb-file-browser"
-version = "0.3.2"
+version = "0.4.0"
 dependencies = [
  "chardetng",
  "encoding_rs",
@@ -4170,6 +4180,7 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-plugin-opener",
+ "tauri-plugin-usb-storage",
 ]
 
 [[package]]

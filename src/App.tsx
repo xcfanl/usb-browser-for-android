@@ -1,7 +1,7 @@
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
 import Explorer from './components/Explorer'
 import Home from './components/Home'
-import type { Screen, ViewerKind, Clipboard, Entry, Volume } from './types'
+import type { Screen, ViewerKind, Clipboard, Entry, UsbStatus, Volume } from './types'
 import * as api from './api'
 import { useStorageRemoved } from './hooks'
 import { classify, MIME_MAP } from './fileTypes'
@@ -31,6 +31,7 @@ const VIEWER_COMPONENTS: Record<
 
 export default function App() {
   const [volumes, setVolumes] = useState<Volume[]>([])
+  const [usb, setUsb] = useState<UsbStatus | null>(null)
   const [volsLoading, setVolsLoading] = useState(true)
   const [allowed, setAllowed] = useState<boolean | null>(null)
   const [stack, setStack] = useState<Screen[]>([])
@@ -43,12 +44,19 @@ export default function App() {
 
   const toast = useCallback((m: string) => showToast(setToastMsg, m), [])
 
-  /* 卷列表 */
-  const refreshVolumes = useCallback(() => {
+  /* 卷列表 + USB 设备状态。request=true（启动 / 手动刷新）会为未授权的 U 盘弹出系统授权框 */
+  const refreshVolumes = useCallback((request = false) => {
     setVolsLoading(true)
-    api.getVolumes().then((v) => { setVolumes(v); setVolsLoading(false) }).catch(() => setVolsLoading(false))
+    Promise.all([
+      api.getVolumes().catch(() => [] as Volume[]),
+      api.usbStatus(request).catch(() => null),
+    ]).then(([v, u]) => {
+      setVolumes(v)
+      setUsb(u)
+      setVolsLoading(false)
+    })
   }, [])
-  useEffect(() => { refreshVolumes() }, [refreshVolumes])
+  useEffect(() => { refreshVolumes(true) }, [refreshVolumes])
 
   /* U 盘插拔：Rust 侧轮询器发出事件，卷列表统一在此刷新 */
   useEffect(() => {
@@ -201,9 +209,11 @@ export default function App() {
       {top === undefined ? (
         <Home
           volumes={volumes}
+          usb={usb}
           loading={volsLoading}
           onPick={pickVolume}
-          onRefresh={refreshVolumes}
+          onRefresh={() => refreshVolumes(true)}
+          toast={toast}
         />
       ) : top.t === 'explorer' ? (
         <Explorer
@@ -240,6 +250,8 @@ export default function App() {
   )
 }
 
+const LOCAL_KINDS: ViewerKind[] = ['image', 'pdf', 'docx', 'xlsx', 'pptx', 'video', 'audio']
+
 function ViewerHost({ kind, path, name, goBack, toast, shareFile, asText }: {
   kind: ViewerKind; path: string; name: string
   goBack: () => void; toast: (m: string) => void
@@ -248,6 +260,20 @@ function ViewerHost({ kind, path, name, goBack, toast, shareFile, asText }: {
 }) {
   const Comp = VIEWER_COMPONENTS[kind] ?? VIEWER_COMPONENTS.binary
   const ext = name.includes('.') ? name.slice(name.lastIndexOf('.') + 1) : ''
+  /* 直接模式 U 盘上的文件没有真实路径：需要资源 URL 的预览先复制到缓存 */
+  const needsLocal = api.isRawPath(path) && LOCAL_KINDS.includes(kind)
+  const [local, setLocal] = useState<string | null>(needsLocal ? null : path)
+  const [loadErr, setLoadErr] = useState('')
+  useEffect(() => {
+    if (!needsLocal) { setLocal(path); return }
+    let alive = true
+    setLocal(null)
+    setLoadErr('')
+    api.usbMaterialize(path)
+      .then((p) => { if (alive) setLocal(p) })
+      .catch((e) => { if (alive) setLoadErr(String(e)) })
+    return () => { alive = false }
+  }, [path, needsLocal])
   /* 预览期间 U 盘被拔出：提示并退回 */
   useStorageRemoved(path, () => {
     toast('文件所在存储卷已移除')
@@ -268,12 +294,16 @@ function ViewerHost({ kind, path, name, goBack, toast, shareFile, asText }: {
         </button>
       </header>
       <div className="viewer-body">
-        <Suspense fallback={<div className="hint">加载预览组件…</div>}>
-          <Comp
-            path={path} name={name} toast={toast}
-            share={() => shareFile(path, ext)} asText={asText}
-          />
-        </Suspense>
+        {local === null ? (
+          <div className="hint">{loadErr || '正在从 U 盘读取…'}</div>
+        ) : (
+          <Suspense fallback={<div className="hint">加载预览组件…</div>}>
+            <Comp
+              path={local} name={name} toast={toast}
+              share={() => shareFile(path, ext)} asText={asText}
+            />
+          </Suspense>
+        )}
       </div>
     </div>
   )

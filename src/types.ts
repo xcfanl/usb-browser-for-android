@@ -15,6 +15,57 @@ export interface Volume {
   writable: boolean
   total_bytes: number
   available_bytes: number
+  /** 文件系统类型（已知时），如 vfat / exfat / FAT32 / NTFS */
+  fs_type: string
+  /** system：Android 系统挂载；direct：本应用通过 USB 直接读取 */
+  source: 'system' | 'direct'
+  free_unknown?: boolean
+}
+
+/** StorageManager 报告的存储卷 */
+export interface SysVolume {
+  name: string
+  uuid: string
+  state: string
+  removable: boolean
+  primary: boolean
+  path: string
+  fsType: string
+  /** 经 /proc/self/mountinfo 确认为 USB（SCSI）设备 */
+  usb: boolean
+}
+
+/** 已连接的 USB 大容量存储设备 */
+export interface UsbDev {
+  id: number
+  deviceName: string
+  vendorId: number
+  productId: number
+  product: string
+  manufacturer: string
+  hasPermission: boolean
+  permissionPending: boolean
+  permissionDenied: boolean
+  supportedProtocol: boolean
+  opened: boolean
+  mounted: boolean
+  fsType: string
+  label: string
+  readOnly: boolean
+  /** why a normally writable volume is read-only (e.g. hibernated Windows) */
+  readOnlyReason?: string
+  capacity: number
+  free: number
+  deviceBytes: number
+  error: string
+  root: string
+}
+
+export interface UsbStatus {
+  usbHost: boolean
+  volumes: SysVolume[]
+  devices: UsbDev[]
+  removableMounted: number
 }
 
 export interface TextContent {

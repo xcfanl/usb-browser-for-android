@@ -1,7 +1,8 @@
 {
   "name": "usb-file-browser",
   "private": true,
-  "version": "0.3.2",
+  "license": "GPL-3.0-or-later",
+  "version": "0.4.0",
   "type": "module",
   "scripts": {
     "dev": "vite",

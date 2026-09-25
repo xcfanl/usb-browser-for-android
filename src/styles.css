@@ -926,3 +926,31 @@ input { font-family: inherit; }
     backdrop-filter: none;
   }
 }
+
+/* ---------- USB 设备卡片 / 格式化 ---------- */
+.home-section { font-size: 13px; color: var(--text2); margin: 14px 4px 8px; }
+.home-section:first-child { margin-top: 2px; }
+.usb-card { width: 100%; padding: 14px; border-radius: 12px; background: var(--card); margin-bottom: 10px; }
+.usb-card-head { display: flex; align-items: center; gap: 14px; }
+.usb-desc { font-size: 13px; color: var(--text2); line-height: 1.6; margin-top: 10px; }
+.usb-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.usb-actions .btn { padding: 8px 14px; font-size: 14px; }
+.btn.danger-text { color: var(--danger); }
+.usb-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
+.usb-tag { font-size: 11.5px; padding: 2px 8px; border-radius: 10px; background: var(--fill); color: var(--text2); }
+.usb-tag.ok { color: var(--k-xlsx); background: color-mix(in srgb, var(--k-xlsx) 15%, transparent); }
+.usb-tag.warn { color: var(--danger); background: color-mix(in srgb, var(--danger) 12%, transparent); }
+.usb-tag.inline { margin-left: 8px; vertical-align: 2px; }
+.link-btn { display: block; width: 100%; text-align: left; font-size: 13px; color: var(--accent); padding: 4px 4px 10px; background: none; }
+.format-warn { font-size: 14px; line-height: 1.6; color: var(--danger); margin-bottom: 12px; }
+.format-field { margin-bottom: 12px; }
+.format-label { font-size: 12.5px; color: var(--text2); margin-bottom: 6px; }
+.format-radio { display: flex; gap: 8px; align-items: flex-start; padding: 6px 0; font-size: 14px; }
+.format-radio span { display: flex; flex-direction: column; }
+.format-radio small { font-size: 12px; color: var(--text2); margin-top: 2px; }
+.format-radio.disabled { opacity: 0.5; }
+.format-check { display: flex; gap: 8px; align-items: flex-start; font-size: 13.5px; margin-bottom: 12px; line-height: 1.5; }
+.format-error { font-size: 12.5px; color: var(--danger); margin-top: 6px; }
+.format-busy { font-size: 13px; color: var(--accent); margin: 6px 0; }
+
+.usb-note { margin: 6px 0; font-size: 12px; color: var(--danger); }
